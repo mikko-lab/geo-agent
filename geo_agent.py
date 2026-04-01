@@ -13,13 +13,15 @@ from dataclasses import dataclass
 
 # ─── ASETUKSET ────────────────────────────────────────────────────────────────
 
-WP_URL      = os.getenv("WP_URL", "https://sinun-sivustosi.fi")
-WP_USER     = os.getenv("WP_USER", "admin")
+WP_URL      = os.getenv("WP_URL", "https://wpsaavutettavuus.fi.fi")
+WP_USER     = os.getenv("WP_USER", "mikkotark")
 WP_PASSWORD = os.getenv("WP_PASSWORD", "")   # WP Application Password
 # Luo Application Password: WP Admin → Käyttäjät → Profiili → Application Passwords
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-MAX_POSTS   = 5                              # Kuinka monta postausta käsitellään kerralla
+MAX_POSTS   = 5                              # Kuinka monta kohdetta käsitellään kerralla
+CONTENT_TYPE = "pages"                       # "posts" = blogipostaukset, "pages" = sivut
+TARGET_SLUG  = ""                            # Tietty sivu slugin perusteella, esim. "etusivu" tai "" = kaikki
 
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -40,10 +42,13 @@ class WordPressClient:
         self.base = base_url.rstrip("/") + "/wp-json/wp/v2"
         self.auth = (user, password)
 
-    def get_posts(self, count: int = 5) -> list[WPPost]:
+    def get_posts(self, count: int = 5, content_type: str = "posts", slug: str = "") -> list[WPPost]:
+        params = {"per_page": count, "status": "publish"}
+        if slug:
+            params["slug"] = slug
         resp = requests.get(
-            f"{self.base}/posts",
-            params={"per_page": count, "status": "publish"},
+            f"{self.base}/{content_type}",
+            params=params,
             auth=self.auth,
             timeout=15,
         )
@@ -59,21 +64,28 @@ class WordPressClient:
             ))
         return posts
 
-    def update_post(self, post_id: int, new_content: str, new_title: str | None = None) -> bool:
+    def update_post(self, post_id: int, new_content: str, new_title: str = None, content_type: str = "posts") -> bool:
         payload: dict = {"content": new_content}
         if new_title:
             payload["title"] = new_title
         resp = requests.post(
-            f"{self.base}/posts/{post_id}",
+            f"{self.base}/{content_type}/{post_id}",
             json=payload,
             auth=self.auth,
             timeout=15,
         )
+        if resp.status_code != 200:
+            print(f"  ⚠️  WP-virhe {resp.status_code}: {resp.text[:200]}")
         return resp.status_code == 200
 
     @staticmethod
     def _strip_html(html: str) -> str:
-        return re.sub(r"<[^>]+>", "", html).strip()
+        # Poistetaan style- ja script-lohkot kokonaan
+        html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
+        # Poistetaan loput HTML-tagit
+        text = re.sub(r"<[^>]+>", "", html).strip()
+        return text
 
 
 class GEOAgent:
@@ -125,6 +137,10 @@ OTSIKKO: {post.title}
         )
         try:
             text = response.content[0].text
+            # Etsitään JSON-objekti tekstistä
+            match = re.search(r'\{.*\}', text, re.DOTALL)
+            if match:
+                return json.loads(match.group())
             return json.loads(text)
         except Exception:
             return {"geo_score": 0, "top_issues": ["Analyysi epäonnistui"]}
@@ -197,7 +213,7 @@ def run_agent():
     agent = GEOAgent(ANTHROPIC_API_KEY)
 
     print(f"📥 Haetaan {MAX_POSTS} postausta WordPressistä...")
-    posts = wp.get_posts(count=MAX_POSTS)
+    posts = wp.get_posts(count=MAX_POSTS, content_type=CONTENT_TYPE, slug=TARGET_SLUG)
     print(f"✅ Löydettiin {len(posts)} postausta.\n")
 
     results = []
@@ -207,6 +223,12 @@ def run_agent():
         print(f"  Postaus {i}/{len(posts)}: {post.title}")
         print(f"  URL: {post.link}")
         print(f"══════════════════════════════════════════════════════")
+
+        # 0. Tarkista onko sisältöä
+        if len(post.content.strip()) < 100:
+            print("  ⚠️  Sivu sisältää liian vähän tekstiä — ohitetaan.\n")
+            results.append({"post": post.title, "score": "–", "action": "ohitettu"})
+            continue
 
         # 1. Analysoi
         print("  🔍 Analysoidaan GEO-pisteet...")
@@ -228,7 +250,14 @@ def run_agent():
         print("\n  ✍️  Optimoidaan sisältöä Claude-mallilla...")
         optimized = agent.optimize(post)
 
-        # 4. Näytä diff käyttäjälle
+        # 4. Analysoi optimoitu sisältö
+        print("  🔍 Analysoidaan optimoitu sisältö...")
+        optimized_post = WPPost(post.id, post.title, optimized, post.slug, post.link)
+        new_analysis = agent.analyze(optimized_post)
+        new_score = new_analysis.get("geo_score", "?")
+        print(f"  📈 GEO-pisteet optimoinnin jälkeen: {geo_score}/10 → {new_score}/10\n")
+
+        # 5. Näytä diff käyttäjälle
         show_diff(post.content, optimized)
 
         # 5. Kysy hyväksyntä
@@ -236,7 +265,7 @@ def run_agent():
 
         if decision == "y":
             print("  💾 Päivitetään WordPressiin...")
-            success = wp.update_post(post.id, optimized)
+            success = wp.update_post(post.id, optimized, content_type=CONTENT_TYPE)
             if success:
                 print("  ✅ Päivitetty onnistuneesti!\n")
                 results.append({"post": post.title, "score": geo_score, "action": "päivitetty"})
