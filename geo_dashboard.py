@@ -59,6 +59,12 @@ class WordPressClient:
             ))
         return posts
 
+    def fetch_rendered_content(self, url: str) -> str:
+        """Hakee renderöidyn sisällön suoraan URL:sta (fallback PHP-sivuille)."""
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        return self._strip_html(resp.text)
+
     def update_post(self, post_id, new_content, content_type="posts"):
         resp = requests.post(
             f"{self.base}/{content_type}/{post_id}",
@@ -206,8 +212,16 @@ if st.session_state.posts:
         with st.expander(f"📄 {post.title} — {post.link}", expanded=False):
 
             if len(post.content.strip()) < 100:
-                st.warning("Sivu sisältää liian vähän tekstiä — ei optimoitavaa.")
-                continue
+                st.info("REST API palautti vähän sisältöä — haetaan renderöity HTML sivulta...")
+                try:
+                    wp_tmp = WordPressClient(wp_url, wp_user, wp_password)
+                    post.content = wp_tmp.fetch_rendered_content(post.link)
+                except Exception as e:
+                    st.warning(f"Sisällön haku epäonnistui: {e}")
+                    continue
+                if len(post.content.strip()) < 100:
+                    st.warning("Sivu sisältää liian vähän tekstiä — ei optimoitavaa.")
+                    continue
 
             col1, col2 = st.columns([2, 1])
 
