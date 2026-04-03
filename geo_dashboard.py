@@ -117,7 +117,7 @@ OTSIKKO: {post.title}
         )
         try:
             text = response.content[0].text
-            match = re.search(r'\{.*\}', text, re.DOTALL)
+            match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
             if match:
                 return json.loads(match.group())
         except Exception:
@@ -270,9 +270,12 @@ if st.session_state.posts:
                     st.session_state.results[post.id] = result
 
             if "optimized" in result:
-                new_score = result.get("new_analysis", {}).get("geo_score", "?")
+                new_score = result.get("new_analysis", {}).get("geo_score", None)
                 old_score = result.get("analysis", {}).get("geo_score", "?")
-                st.success(f"📈 Pisteet: {old_score}/10 → {new_score}/10")
+                if new_score:
+                    st.success(f"📈 Pisteet: {old_score}/10 → {new_score}/10")
+                else:
+                    st.success(f"Optimointi valmis (pisteet ennen: {old_score}/10 — uuden analyysin parsinta epäonnistui)")
 
                 tab1, tab2 = st.tabs(["Optimoitu sisältö", "Alkuperäinen"])
                 with tab1:
