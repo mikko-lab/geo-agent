@@ -4,6 +4,8 @@ WordPress-sisällön optimointi AI-hakukoneita varten (Generative Engine Optimiz
 
 Agentti hakee sivustosi WordPress-sivut tai -postaukset, analysoi niiden GEO-pisteet Claude-mallilla ja ehdottaa parannettua sisältöä. Muutokset päivitetään WordPressiin vasta hyväksyntäsi jälkeen.
 
+Tämä on varhainen toteutus GEO-optimointijärjestelmästä. Tuotantoversio on saatavilla myös hostattuna ratkaisuna toimistoille ja sisällöntuottajille.
+
 **Tuetut AI-hakukoneet:** Perplexity, ChatGPT Search, Google AI Overviews
 
 ---
@@ -107,3 +109,7 @@ Avaa selaimessa `http://localhost:8501`. Syötä asetukset sivupalkissa ja halli
 - Älä koskaan tallenna API-avaimia tai salasanoja koodiin tai git-repoon
 - `~/.geo.env` on rajattu vain omistajan luettavaksi (`chmod 600`)
 - `.gitignore` estää ympäristömuuttujatiedostojen päätymisen repoon
+
+💡 Huomio
+
+Tämä projekti on kehitteillä oleva GEO (Generative Engine Optimization) -työkalu, joka on suunniteltu parantamaan sisältöjen näkyvyyttä AI-pohjaisissa hakukoneissa.
