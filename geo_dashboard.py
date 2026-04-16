@@ -34,6 +34,8 @@ class WPPost:
 
 class WordPressClient:
     def __init__(self, base_url, user, password):
+        if base_url and not base_url.startswith(("http://", "https://")):
+            base_url = "https://" + base_url
         self.base = base_url.rstrip("/") + "/wp-json/wp/v2"
         self.auth = (user, password)
 
