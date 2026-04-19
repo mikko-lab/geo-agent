@@ -1,0 +1,147 @@
+/* GEO Agent — Gutenberg-sivupaneeli */
+
+.geo-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: #757575;
+  font-size: 13px;
+}
+
+/* GEO-pisteet */
+.geo-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #f6f7f7;
+  border-radius: 4px;
+}
+
+.geo-score__label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #757575;
+}
+
+.geo-score__value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.geo-score__value--good   { color: #1e8a44; }
+.geo-score__value--medium { color: #c97a00; }
+.geo-score__value--bad    { color: #cc1818; }
+
+/* Strategia */
+.geo-strategy {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.geo-reasoning {
+  font-size: 12px;
+  color: #757575;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+/* SEO-signaalit */
+.geo-seo-signals {
+  margin-bottom: 12px;
+}
+
+.geo-seo-signals strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #757575;
+  margin-bottom: 6px;
+}
+
+.geo-seo-signals ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.geo-seo-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.geo-seo-row:last-child { border-bottom: none; }
+
+.geo-seo-row__icon  { flex-shrink: 0; font-size: 12px; }
+.geo-seo-row__label { flex: 1; color: #3c434a; }
+.geo-seo-row__value { color: #757575; font-size: 11px; }
+
+/* GEO-ongelmat */
+.geo-issues {
+  margin-bottom: 12px;
+}
+
+.geo-issues strong {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #757575;
+  margin-bottom: 6px;
+}
+
+.geo-issues ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.geo-issue {
+  font-size: 12px;
+  padding: 3px 0 3px 14px;
+  position: relative;
+  color: #cc1818;
+  line-height: 1.4;
+}
+
+.geo-issue::before {
+  content: '•';
+  position: absolute;
+  left: 4px;
+}
+
+/* Toimintopainikkeet */
+.geo-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* Diff-vinkki */
+.geo-diff-hint {
+  font-size: 12px;
+  color: #757575;
+  margin-bottom: 8px;
+}
+
+/* Varmuuskopio-pvm */
+.geo-backup-date {
+  font-size: 12px;
+  color: #757575;
+  margin-bottom: 8px;
+}
+
+/* Analyysi-osio */
+.geo-analysis {
+  margin-top: 8px;
+}
