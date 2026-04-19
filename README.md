@@ -4,8 +4,6 @@ WordPress-sisällön optimointi AI-hakukoneita varten (Generative Engine Optimiz
 
 Agentti hakee sivustosi WordPress-sivut tai -postaukset, analysoi niiden GEO-pisteet Claude-mallilla ja ehdottaa parannettua sisältöä. Muutokset päivitetään WordPressiin vasta hyväksyntäsi jälkeen.
 
-Tämä on varhainen toteutus GEO-optimointijärjestelmästä. Tuotantoversio on saatavilla myös hostattuna ratkaisuna toimistoille ja sisällöntuottajille.
-
 **Tuetut AI-hakukoneet:** Perplexity, ChatGPT Search, Google AI Overviews
 
 ---
@@ -28,7 +26,7 @@ pip install anthropic requests streamlit
 **1. Kloonaa repo**
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/mikko-lab/geo-agent.git
 cd geo-agent
 ```
 
@@ -89,6 +87,38 @@ Avaa selaimessa `http://localhost:8501`. Syötä asetukset sivupalkissa ja halli
 | `MAX_POSTS` | `5` | Kuinka monta kohdetta käsitellään kerralla |
 | `CONTENT_TYPE` | `"pages"` | `"pages"` = sivut, `"posts"` = blogipostaukset |
 | `TARGET_SLUG` | `""` | Tietyn sivun slug, tyhjä = kaikki |
+| `PROTECTED_SLUGS` | *(lista)* | Slugit joita agentti ei koskaan muokkaa |
+
+---
+
+## Turvallisuusominaisuudet
+
+### Suojatut slugit
+
+Tiedostossa `geo_agent.py` on lista `PROTECTED_SLUGS`, joka estää agentin muokkaamasta kriittisiä sivuja automaattisesti:
+
+```python
+PROTECTED_SLUGS = [
+    "etusivu",
+    "saavutettavuusseloste",
+    "tietosuojaseloste",
+    "kaytto-ja-tilausehdot",
+    "yhteystiedot",
+    # lisää omat suojatut sivusi tähän
+]
+```
+
+### Automaattinen varmuuskopio
+
+Ennen jokaista julkaisua agentti hakee sivun nykyisen sisällön `context=edit`-parametrilla, joka palauttaa Gutenberg-raakasisällön `<!-- wp:html -->`-lohkokommentteineen. Tämä on tärkeää: ilman `context=edit` WordPress palauttaa sanitoidun HTML-version josta inline `<style>`-tagit on poistettu.
+
+### Tyylitarkistus ja automaattinen rollback
+
+Jos sivu käyttää `<!-- wp:html -->`-lohkoa (eli sisältää inline CSS:ää), agentti tarkistaa julkaisun jälkeen että `<style>`-tagit löytyvät renderöidystä sivusta. Jos tagit puuttuvat, agentti:
+
+1. Palauttaa varmuuskopion automaattisesti WordPressiin
+2. Ilmoittaa virheestä selkeästi
+3. Merkitsee julkaisun epäonnistuneeksi
 
 ---
 
@@ -109,7 +139,4 @@ Avaa selaimessa `http://localhost:8501`. Syötä asetukset sivupalkissa ja halli
 - Älä koskaan tallenna API-avaimia tai salasanoja koodiin tai git-repoon
 - `~/.geo.env` on rajattu vain omistajan luettavaksi (`chmod 600`)
 - `.gitignore` estää ympäristömuuttujatiedostojen päätymisen repoon
-
-💡 Huomio
-
-Tämä projekti on kehitteillä oleva GEO (Generative Engine Optimization) -työkalu, joka on suunniteltu parantamaan sisältöjen näkyvyyttä AI-pohjaisissa hakukoneissa.
+- Käytä aina WordPress Application Passwordia — ei tavallista salasanaa
