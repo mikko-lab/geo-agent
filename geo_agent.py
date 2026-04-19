@@ -1,6 +1,7 @@
 """
 GEO-agentti WordPress-sivustoille
 Optimoi sisältöä AI-hakukoneita varten (Perplexity, ChatGPT Search, Google AI Overviews)
+Hybridimalli: analysoi SEO- ja GEO-signaalit ennen optimointia ja valitsee strategian.
 """
 
 import os
@@ -54,7 +55,32 @@ class WPPost:
     content: str      # tekstisisältö (HTML poistettu) — käytetään analyysiin
     slug: str
     link: str
-    raw_content: str = field(default="")  # Gutenberg-raakaversio — käytetään backupiin ja julkaisuun
+    raw_content: str = field(default="")   # Gutenberg-raakaversio — backupiin ja julkaisuun
+    rendered_html: str = field(default="") # rendered HTML — SEO-signaalien tarkistukseen
+
+
+@dataclass
+class SEOSignals:
+    """Kevyt SEO-tarkistus ennen optimointia."""
+    word_count: int
+    h2_count: int
+    focus_keyword_in_h2: bool  # onko sivun otsikosta johdettu avainsana H2:ssa
+    internal_link_count: int
+    has_meta_description: bool  # arvio: onko yli 120 merkkiä ensimmäisessä kappaleessa
+    fixes_needed: list[str]     # lista puuttuvista SEO-elementeistä
+
+    @property
+    def needs_seo_work(self) -> bool:
+        return len(self.fixes_needed) > 0
+
+
+@dataclass
+class OptimizationStrategy:
+    """Optimointistrategia analyysin perusteella."""
+    strategy: str        # "seo" | "geo" | "hybrid"
+    geo_score: int       # 1–10
+    seo_fixes: list[str] # lista SEO-korjauksista
+    reasoning: str       # perustelu strategialle
 
 
 class WordPressClient:
@@ -87,6 +113,7 @@ class WordPressClient:
                 slug=p["slug"],
                 link=p["link"],
                 raw_content=raw,
+                rendered_html=rendered,
             ))
         return posts
 
@@ -170,26 +197,94 @@ class WordPressClient:
         return text
 
 
+def check_seo_signals(post: WPPost) -> SEOSignals:
+    """
+    Kevyt SEO-tarkistus rendered HTML:stä ja tekstisisällöstä.
+    Ei vaadi ulkoisia API-kutsuja — perustuu paikalliseen analyysiin.
+    """
+    html = post.rendered_html
+    text = post.content
+    title = post.title.lower()
+
+    # Sanamäärä
+    words = text.split()
+    word_count = len(words)
+
+    # H2-otsikot rendered HTML:stä
+    h2_tags = re.findall(r"<h2[^>]*>(.*?)</h2>", html, re.DOTALL | re.IGNORECASE)
+    h2_texts = [re.sub(r"<[^>]+>", "", h).lower().strip() for h in h2_tags]
+    h2_count = len(h2_texts)
+
+    # Focus keyword: johdetaan sivun otsikosta (ensimmäinen merkittävä sana/pari)
+    title_words = [w for w in title.split() if len(w) > 3]
+    focus_keyword = title_words[0] if title_words else ""
+    focus_keyword_in_h2 = any(focus_keyword in h2 for h2 in h2_texts) if focus_keyword else False
+
+    # Sisäiset linkit (linkit samaan domainiin tai relatiiviset)
+    wp_domain = urlparse(post.link).netloc
+    all_links = re.findall(r'href=["\']([^"\']+)["\']', html)
+    internal_links = [
+        l for l in all_links
+        if l.startswith("/") or wp_domain in l
+    ]
+    # Poistetaan ankkurilinkit ja tiedostolinkit
+    internal_links = [l for l in internal_links if not l.startswith("/#") and "wp-content" not in l]
+    internal_link_count = len(internal_links)
+
+    # Meta description -arvio: onko ensimmäinen kappale 120–160 merkkiä
+    first_para_match = re.search(r"<p[^>]*>(.*?)</p>", html, re.DOTALL | re.IGNORECASE)
+    first_para = re.sub(r"<[^>]+>", "", first_para_match.group(1)).strip() if first_para_match else ""
+    has_meta_description = 120 <= len(first_para) <= 320
+
+    # Puutteet
+    fixes: list[str] = []
+    if word_count < 600:
+        fixes.append(f"Sanamäärä liian pieni ({word_count} sanaa, suositus ≥ 600)")
+    if not focus_keyword_in_h2:
+        fixes.append(f"Focus keyword '{focus_keyword}' ei löydy H2-otsikoista")
+    if internal_link_count < 2:
+        fixes.append(f"Sisäisiä linkkejä liian vähän ({internal_link_count}, suositus ≥ 2)")
+    if not has_meta_description:
+        fixes.append("Ensimmäinen kappale ei sovellu meta descriptioniksi (120–320 merkkiä)")
+
+    return SEOSignals(
+        word_count=word_count,
+        h2_count=h2_count,
+        focus_keyword_in_h2=focus_keyword_in_h2,
+        internal_link_count=internal_link_count,
+        has_meta_description=has_meta_description,
+        fixes_needed=fixes,
+    )
+
+
 class GEOAgent:
     """
-    GEO-optimointiagentti — parantaa sisällön näkyvyyttä
-    AI-pohjaisissa hakukoneissa (Perplexity, ChatGPT, Google SGE).
+    GEO-optimointiagentti hybridimallilla.
+
+    Ennen optimointia:
+    1. Tarkistaa SEO-signaalit paikallisesti (sanamäärä, H2, sisäiset linkit)
+    2. Analysoi GEO-pisteet Claude-mallilla
+    3. Päättää strategian: seo | geo | hybrid
+    4. Syöttää SEO-puutteet kontekstina optimointiprompttiin
     """
 
-    SYSTEM_PROMPT = """Olet GEO-optimointiasiantuntija (Generative Engine Optimization).
-Tehtäväsi on muokata verkkosivuston sisältöä niin, että tekoälypohjaiset
-hakukoneet (Perplexity, ChatGPT Search, Google AI Overviews) siteeraavat
-ja suosittelevat sitä mielellään.
+    SYSTEM_PROMPT = """Olet sisältöstrategisti, joka hallitsee sekä SEO- että GEO-optimoinnin
+(Generative Engine Optimization).
 
 GEO-optimoinnin periaatteet:
 1. KYSYMYS-VASTAUS-RAKENNE: Lisää eksplisiittisiä kysymyksiä ja suoria vastauksia.
-   AI-hakukoneet poimivat mielellään "Mikä on X? X on..." -rakenteita.
 2. FAKTAT JA LUVUT: Lisää konkreettisia tilastoja, prosentteja ja vuosilukuja.
 3. AUKTORITEETTI: Mainitse asiantuntijuus ja kokemus selkeästi.
 4. MÄÄRITELMÄT: Määrittele keskeiset käsitteet yksinkertaisesti.
 5. TIIVISTETYT VÄITTEET: Jokaisen kappaleen ensimmäinen lause = pääväite.
 6. RAKENNE: Käytä lyhyitä kappaleita (2–4 lausetta). Lisää väliotsikoita.
 7. SCHEMA-YSTÄVÄLLISYYS: Kirjoita kuin täyttäisit FAQ- tai HowTo-skeemaa.
+
+SEO-periaatteet (jos strategia vaatii):
+- Focus keyword esiintyy H1:ssä, ensimmäisessä kappaleessa ja vähintään yhdessä H2:ssa
+- Sanamäärä ≥ 600
+- Ensimmäinen kappale toimii meta descriptionina (120–320 merkkiä)
+- Sisäiset linkit muihin sivuston sivuihin
 
 Palauta VAIN optimoitu sisältö ilman selityksiä tai kommentteja."""
 
@@ -226,17 +321,62 @@ OTSIKKO: {post.title}
         except Exception:
             return {"geo_score": 0, "top_issues": ["Analyysi epäonnistui"]}
 
-    def optimize(self, post: WPPost) -> str:
-        """Optimoi postauksen sisällön GEO:a varten."""
+    def decide_strategy(self, geo_score: int, seo: SEOSignals) -> OptimizationStrategy:
+        """
+        Päättää optimointistrategian GEO-pisteiden ja SEO-signaalien perusteella.
+
+        Logiikka:
+        - geo_score < 5 JA SEO-puutteita → hybrid (molemmat tarvitsevat työtä)
+        - geo_score < 5 JA ei SEO-puutteita → geo
+        - geo_score ≥ 5 JA SEO-puutteita → seo
+        - geo_score ≥ 5 JA ei SEO-puutteita → ohitetaan (jo kunnossa)
+        """
+        has_geo_issues = geo_score < 5
+        has_seo_issues = seo.needs_seo_work
+
+        if has_geo_issues and has_seo_issues:
+            strategy = "hybrid"
+            reasoning = f"GEO-pisteet matalat ({geo_score}/10) ja {len(seo.fixes_needed)} SEO-puutetta — optimoidaan molemmat."
+        elif has_geo_issues:
+            strategy = "geo"
+            reasoning = f"GEO-pisteet matalat ({geo_score}/10), SEO kunnossa — keskitytään AI-siteerattavuuteen."
+        elif has_seo_issues:
+            strategy = "seo"
+            reasoning = f"GEO riittävä ({geo_score}/10), mutta {len(seo.fixes_needed)} SEO-puutetta — korjataan hakukonenäkyvyys."
+        else:
+            strategy = "none"
+            reasoning = f"GEO ({geo_score}/10) ja SEO kunnossa — ei optimointitarvetta."
+
+        return OptimizationStrategy(
+            strategy=strategy,
+            geo_score=geo_score,
+            seo_fixes=seo.fixes_needed,
+            reasoning=reasoning,
+        )
+
+    def optimize(self, post: WPPost, strategy: OptimizationStrategy) -> str:
+        """Optimoi postauksen sisällön valitun strategian mukaan."""
+        seo_context = ""
+        if strategy.seo_fixes:
+            seo_context = "\n\nSEO-PUUTTEET JOTKA TULEE KORJATA:\n" + "\n".join(
+                f"- {fix}" for fix in strategy.seo_fixes
+            )
+
+        strategy_instruction = {
+            "geo": "Optimoi GEO-periaatteiden mukaan. Paranna AI-siteerattavuutta kysymys-vastaus-rakenteella ja faktoilla.",
+            "seo": "Korjaa SEO-puutteet säilyttäen olemassa oleva GEO-rakenne. Älä heikennä AI-siteerattavuutta.",
+            "hybrid": "Optimoi sekä GEO- että SEO-näkökulmasta. Korjaa SEO-puutteet ja paranna AI-siteerattavuutta samanaikaisesti.",
+        }.get(strategy.strategy, "Optimoi GEO-periaatteiden mukaan.")
+
         response = self.client.messages.create(
             model="claude-opus-4-6",
             max_tokens=4000,
             system=self.SYSTEM_PROMPT,
             messages=[{
                 "role": "user",
-                "content": f"""Optimoi seuraava WordPress-postaus GEO-periaatteiden mukaan.
+                "content": f"""Strategia: {strategy_instruction}{seo_context}
+
 Säilytä alkuperäinen asiasisältö ja kieli (suomi/englanti).
-Paranna rakennetta, lisää kysymys-vastaus-pareja ja konkreettisia väitteitä.
 
 OTSIKKO: {post.title}
 
@@ -245,6 +385,23 @@ SISÄLTÖ:
             }],
         )
         return response.content[0].text
+
+
+def show_strategy(strategy: OptimizationStrategy, seo: SEOSignals):
+    """Tulostaa strategia-analyysin käyttäjälle."""
+    icons = {"geo": "🌐", "seo": "🔍", "hybrid": "⚡", "none": "✅"}
+    icon = icons.get(strategy.strategy, "?")
+    print(f"\n  {icon} Strategia: {strategy.strategy.upper()}")
+    print(f"     {strategy.reasoning}")
+    print(f"\n  📊 SEO-signaalit:")
+    print(f"     Sanamäärä: {seo.word_count} {'✅' if seo.word_count >= 600 else '❌'}")
+    print(f"     H2-otsikot: {seo.h2_count} kpl, focus keyword H2:ssa: {'✅' if seo.focus_keyword_in_h2 else '❌'}")
+    print(f"     Sisäiset linkit: {seo.internal_link_count} {'✅' if seo.internal_link_count >= 2 else '❌'}")
+    print(f"     Meta description -arvio: {'✅' if seo.has_meta_description else '❌'}")
+    if strategy.seo_fixes:
+        print(f"\n  🔧 SEO-korjaukset:")
+        for fix in strategy.seo_fixes:
+            print(f"     • {fix}")
 
 
 def show_diff(original: str, optimized: str, preview_lines: int = 20):
@@ -267,12 +424,6 @@ def show_diff(original: str, optimized: str, preview_lines: int = 20):
 
 
 def ask_approval(post_title: str) -> str:
-    """
-    Pyytää käyttäjältä hyväksynnän. Palauttaa:
-      'y' = hyväksy ja päivitä
-      'n' = hylkää
-      'q' = lopeta kaikki
-    """
     while True:
         answer = input(
             f"    ❓ Päivitetäänkö \"{post_title}\" WordPressiin?\n"
@@ -286,9 +437,9 @@ def ask_approval(post_title: str) -> str:
 def run_agent():
     """
     Käynnistää GEO-agentin human-in-the-loop -tilassa.
-    Jokainen muutos näytetään sinulle ennen WordPressiin päivitystä.
+    Hybridimalli analysoi SEO- ja GEO-signaalit ennen jokaista optimointia.
     """
-    print("🤖 GEO-agentti käynnistyy (human-in-the-loop -tila)\n")
+    print("🤖 GEO-agentti käynnistyy (hybridimalli, human-in-the-loop)\n")
 
     wp = WordPressClient(WP_URL, WP_USER, WP_PASSWORD)
     agent = GEOAgent(ANTHROPIC_API_KEY)
@@ -305,50 +456,57 @@ def run_agent():
         print(f"  URL: {post.link}")
         print(f"══════════════════════════════════════════════════════")
 
-        # 0. Tarkista suojattu slug
+        # 0. Suojattu slug
         slug = extract_slug(post.link) or post.slug
         if slug in PROTECTED_SLUGS:
             print(f"  🔒 Suojattu sivu — ohitetaan.\n")
-            results.append({"post": post.title, "score": "–", "action": "suojattu"})
+            results.append({"post": post.title, "strategy": "–", "action": "suojattu"})
             continue
 
-        # 1. Tarkista onko sisältöä
+        # 1. Tarkista minimisisältö
         if len(post.content.strip()) < 100:
             print("  ⚠️  Sivu sisältää liian vähän tekstiä — ohitetaan.\n")
-            results.append({"post": post.title, "score": "–", "action": "ohitettu"})
+            results.append({"post": post.title, "strategy": "–", "action": "ohitettu"})
             continue
 
-        # 2. Analysoi
-        print("  🔍 Analysoidaan GEO-pisteet...")
+        # 2. SEO-signaalit (paikallinen, ei API-kutsuja)
+        print("  🔍 Tarkistetaan SEO-signaalit...")
+        seo = check_seo_signals(post)
+
+        # 3. GEO-analyysi
+        print("  🌐 Analysoidaan GEO-pisteet...")
         analysis = agent.analyze(post)
-        geo_score = analysis.get("geo_score", "?")
-        issues = analysis.get("top_issues", [])
+        geo_score = analysis.get("geo_score", 0)
+        geo_issues = analysis.get("top_issues", [])
         print(f"  📊 GEO-pisteet: {geo_score}/10")
-        if issues:
-            for issue in issues:
+        if geo_issues:
+            for issue in geo_issues:
                 print(f"     • {issue}")
 
-        # 3. Ohita jos jo hyvä
-        if isinstance(geo_score, (int, float)) and geo_score >= 7:
-            print("  ✅ Sisältö on jo hyvin optimoitu, ohitetaan.\n")
-            results.append({"post": post.title, "score": geo_score, "action": "ohitettu"})
+        # 4. Päätä strategia
+        strategy = agent.decide_strategy(geo_score, seo)
+        show_strategy(strategy, seo)
+
+        if strategy.strategy == "none":
+            print("  ✅ Sivu on kunnossa — ei optimointitarvetta.\n")
+            results.append({"post": post.title, "strategy": "none", "action": "ohitettu"})
             continue
 
-        # 4. Optimoi
-        print("\n  ✍️  Optimoidaan sisältöä Claude-mallilla...")
-        optimized = agent.optimize(post)
+        # 5. Optimoi valitulla strategialla
+        print(f"\n  ✍️  Optimoidaan ({strategy.strategy.upper()}) Claude-mallilla...")
+        optimized = agent.optimize(post, strategy)
 
-        # 5. Analysoi optimoitu sisältö
+        # 6. GEO-pisteet optimoinnin jälkeen
         print("  🔍 Analysoidaan optimoitu sisältö...")
-        optimized_post = WPPost(post.id, post.title, optimized, post.slug, post.link)
-        new_analysis = agent.analyze(optimized_post)
+        opt_post = WPPost(post.id, post.title, optimized, post.slug, post.link)
+        new_analysis = agent.analyze(opt_post)
         new_score = new_analysis.get("geo_score", "?")
-        print(f"  📈 GEO-pisteet optimoinnin jälkeen: {geo_score}/10 → {new_score}/10\n")
+        print(f"  📈 GEO: {geo_score}/10 → {new_score}/10\n")
 
-        # 6. Näytä diff käyttäjälle
+        # 7. Näytä diff
         show_diff(post.content, optimized)
 
-        # 7. Kysy hyväksyntä
+        # 8. Hyväksyntä
         decision = ask_approval(post.title)
 
         if decision == "y":
@@ -356,18 +514,16 @@ def run_agent():
             success = wp.update_post(post, optimized, content_type=CONTENT_TYPE)
             if success:
                 print("  ✅ Päivitetty onnistuneesti!\n")
-                results.append({"post": post.title, "score": geo_score, "action": "päivitetty"})
+                results.append({"post": post.title, "strategy": strategy.strategy, "action": "päivitetty"})
             else:
                 print("  ❌ Päivitys epäonnistui tai peruttu.\n")
-                results.append({"post": post.title, "score": geo_score, "action": "virhe"})
-
+                results.append({"post": post.title, "strategy": strategy.strategy, "action": "virhe"})
         elif decision == "n":
             print("  ⏭️  Ohitettu.\n")
-            results.append({"post": post.title, "score": geo_score, "action": "hylätty"})
-
+            results.append({"post": post.title, "strategy": strategy.strategy, "action": "hylätty"})
         elif decision == "q":
             print("\n  🛑 Lopetetaan käyttäjän pyynnöstä.\n")
-            results.append({"post": post.title, "score": geo_score, "action": "keskeytetty"})
+            results.append({"post": post.title, "strategy": strategy.strategy, "action": "keskeytetty"})
             break
 
     # Yhteenveto
@@ -375,7 +531,7 @@ def run_agent():
     emojit = {"ohitettu": "⏭️", "päivitetty": "✅", "hylätty": "🚫", "virhe": "❌", "keskeytetty": "🛑", "suojattu": "🔒"}
     for r in results:
         emoji = emojit.get(r["action"], "?")
-        print(f"  {emoji} {r['post']} (GEO: {r['score']}/10) → {r['action']}")
+        print(f"  {emoji} {r['post']} [{r['strategy']}] → {r['action']}")
 
     paivitetty = sum(1 for r in results if r["action"] == "päivitetty")
     print(f"\n  Yhteensä päivitetty: {paivitetty}/{len(results)} postausta")

@@ -122,6 +122,34 @@ Jos sivu käyttää `<!-- wp:html -->`-lohkoa (eli sisältää inline CSS:ää),
 
 ---
 
+## Hybridimalli
+
+Ennen jokaista optimointia agentti tekee kaksivaiheen analyysin:
+
+**1. SEO-signaalit (paikallinen, ei API-kutsuja)**
+
+| Signaali | Vaatimus |
+|---|---|
+| Sanamäärä | ≥ 600 sanaa |
+| Focus keyword H2:ssa | Otsikosta johdettu avainsana löytyy H2-otsikosta |
+| Sisäiset linkit | ≥ 2 linkkiä sivuston muille sivuille |
+| Meta description | Ensimmäinen kappale 120–320 merkkiä |
+
+**2. GEO-pisteet (Claude-analyysi, 1–10)**
+
+Strategia valitaan näiden perusteella:
+
+| GEO-pisteet | SEO-puutteita | Strategia |
+|---|---|---|
+| < 5 | Kyllä | **hybrid** — molemmat optimoidaan |
+| < 5 | Ei | **geo** — fokus AI-siteerattavuuteen |
+| ≥ 5 | Kyllä | **seo** — hakukonenäkyvyys korjataan |
+| ≥ 5 | Ei | *(ohitetaan — sivu on jo kunnossa)* |
+
+SEO-puutteet syötetään Claudelle kontekstina optimointipromptin yhteydessä — Claude korjaa ne osana optimointia ilman erillistä ajovaihetta.
+
+---
+
 ## GEO-optimoinnin periaatteet
 
 1. **Kysymys-vastaus-rakenne** — AI-hakukoneet poimivat "Mikä on X? X on..." -rakenteita
