@@ -22,7 +22,9 @@ class GEO_Agent_Optimizer {
         . "TÄRKEÄÄ — MUOTOILU:\n"
         . "- Käytä HTML-tageja, EI markdownia. Otsikot: <h2>, <h3>. Kappaleet: <p>. Listat: <ul><li>.\n"
         . "- Älä käytä #, ##, **, _ tai muita markdown-merkkejä.\n"
-        . "- Palauta VAIN HTML-sisältö ilman selityksiä, kommentteja tai ```-koodilohkoja.";
+        . "- Sisältö voi sisältää [[BLOCK_N]]-merkkejä (esim. [[BLOCK_0]]). "
+        . "Säilytä ne TÄSMÄLLEEN paikoillaan — ne ovat sivun rakenteellisia elementtejä (kuvia, linkkejä jne.).\n"
+        . "- Palauta VAIN sisältö ilman selityksiä, kommentteja tai ```-koodilohkoja.";
 
     public function __construct() {
         $this->analyzer = new GEO_Agent_Analyzer();
@@ -32,21 +34,39 @@ class GEO_Agent_Optimizer {
      * Optimoi sisältö strategian mukaan.
      */
     public function optimize(string $content_html, string $title, string $strategy, array $seo_fixes): string|\WP_Error {
-        // Säilytetään media- ja HTML-lohkot (kuvat, tyylit, shortcodet jne.)
+        // Korvataan kaikki ei-tekstilohkot [[BLOCK_N]]-merkeillä jotka Claude säilyttää.
+        // Tekstilohkot (paragraph, heading, list, quote) lähetetään optimoitaviksi.
         $preserved = [];
-        $text_only = preg_replace_callback(
-            '/<!-- wp:(image|html|gallery|video|audio|cover|media-text|file|shortcode|embed|buttons|button|separator|spacer)(\s[^>]*)? -->[\s\S]*?<!-- \/wp:\1 -->/',
-            function ($m) use (&$preserved) { $preserved[] = $m[0]; return ''; },
+        $counter   = 0;
+
+        // Container-lohkot: <!-- wp:X --> ... <!-- /wp:X -->
+        $working = preg_replace_callback(
+            '/<!-- wp:((?!paragraph\b|heading\b|list\b|list-item\b|quote\b|verse\b)[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)(\s[^>]*)? -->[\s\S]*?<!-- \/wp:\1 -->/',
+            function ($m) use (&$preserved, &$counter) {
+                $key = "[[BLOCK_{$counter}]]";
+                $preserved[$counter] = $m[0];
+                $counter++;
+                return $key;
+            },
             $content_html
         );
-        // Self-closing lohkot: <!-- wp:image {...} /-->
-        $text_only = preg_replace_callback(
-            '/<!-- wp:(?:image|gallery|separator|spacer)(?:\s[^>]*)?\s*\/-->/',
-            function ($m) use (&$preserved) { $preserved[] = $m[0]; return ''; },
-            $text_only
+
+        // Self-closing lohkot: <!-- wp:X ... /-->
+        $working = preg_replace_callback(
+            '/<!-- wp:((?!paragraph\b|heading\b|list\b|list-item\b|quote\b|verse\b)[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?)(\s[^>]*)?\s*\/-->/',
+            function ($m) use (&$preserved, &$counter) {
+                $key = "[[BLOCK_{$counter}]]";
+                $preserved[$counter] = $m[0];
+                $counter++;
+                return $key;
+            },
+            $working
         );
 
-        $text = wp_strip_all_tags($text_only);
+        // Poistetaan Gutenberg-kommentit tekstilohkoista mutta säilytetään [[BLOCK_N]] merkit
+        $text = preg_replace('/<!-- \/?wp:[^>]+ -->/', '', $working);
+        $text = wp_strip_all_tags($text);
+        // wp_strip_all_tags poistaa tagit mutta jättää [[BLOCK_N]] merkit paikoilleen
 
         $strategy_instruction = match ($strategy) {
             'geo'    => 'Optimoi GEO-periaatteiden mukaan. Paranna AI-siteerattavuutta kysymys-vastaus-rakenteella ja faktoilla.',
@@ -62,16 +82,36 @@ class GEO_Agent_Optimizer {
         }
 
         $prompt = "Strategia: {$strategy_instruction}{$seo_context}\n\n"
-            . "Säilytä alkuperäinen asiasisältö ja kieli (suomi/englanti).\n\n"
+            . "Säilytä alkuperäinen asiasisältö ja kieli (suomi/englanti).\n"
+            . "TÄRKEÄÄ: Säilytä kaikki [[BLOCK_N]]-merkit (esim. [[BLOCK_0]]) TÄSMÄLLEEN paikoillaan tekstissä.\n\n"
             . "OTSIKKO: {$title}\n\n"
             . "SISÄLTÖ:\n{$text}";
 
         $optimized = $this->analyzer->call_claude($prompt, self::SYSTEM_PROMPT, (int) get_option('geo_agent_max_tokens', 8000));
         if (is_wp_error($optimized)) return $optimized;
 
-        // Palautetaan säilytetyt lohkot (kuvat, tyylit) ensin, sitten optimoitu teksti
-        $prefix = empty($preserved) ? '' : implode("\n\n", $preserved) . "\n\n";
-        return $prefix . $optimized;
+        // Palautetaan alkuperäiset lohkot merkkien tilalle
+        $result = preg_replace_callback(
+            '/\[\[BLOCK_(\d+)\]\]/',
+            function ($m) use ($preserved) {
+                return $preserved[(int) $m[1]] ?? $m[0];
+            },
+            $optimized
+        );
+
+        // Fallback: jos Claude poisti merkit, liitetään säilytetyt lohkot alkuun
+        if (!empty($preserved)) {
+            $missing = array_filter(
+                array_keys($preserved),
+                fn($i) => !str_contains($result, $preserved[$i])
+            );
+            if (!empty($missing)) {
+                $fallback = implode("\n\n", array_map(fn($i) => $preserved[$i], $missing));
+                $result   = $fallback . "\n\n" . $result;
+            }
+        }
+
+        return $result;
     }
 
     /**
