@@ -145,3 +145,36 @@
 .geo-analysis {
   margin-top: 8px;
 }
+
+/* Pisteiden vertailu ennen/jälkeen */
+.geo-score-comparison {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f6f7f7;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.geo-score-compare-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.geo-score-compare-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #757575;
+}
+
+.geo-score-arrow {
+  font-size: 18px;
+  color: #757575;
+  margin-top: 8px;
+}

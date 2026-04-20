@@ -25,10 +25,11 @@
     const content  = useSelect( s => s('core/editor').getEditedPostContent() );
     const { editPost, savePost } = useDispatch('core/editor');
 
-    const [phase, setPhase]                 = useState('idle');   // idle | analyzing | analyzed | optimizing | optimized | publishing
+    const [phase, setPhase]                 = useState('idle');   // idle | analyzing | analyzed | optimizing | scoring | optimized | publishing
     const [error, setError]                 = useState(null);
     const [notice, setNotice]               = useState(null);
     const [analysis, setAnalysis]           = useState(null);
+    const [analysisAfter, setAnalysisAfter] = useState(null);
     const [optimizedContent, setOptimized]  = useState('');
     const [hasBackup, setHasBackup]         = useState(false);
     const [backupDate, setBackupDate]       = useState(null);
@@ -48,6 +49,7 @@
     function handleAnalyze() {
       setError(null);
       setNotice(null);
+      setAnalysisAfter(null);
       setPhase('analyzing');
       apiFetch({
         url    : `${apiBase}/analyze`,
@@ -79,8 +81,21 @@
           seo_fixes: analysis.seo?.fixes || [],
         },
       }).then(r => {
-        setOptimized(r.optimized_content);
-        setPhase('optimized');
+        const optimized = r.optimized_content;
+        setOptimized(optimized);
+        // Analysoi optimoitu teksti automaattisesti pisteitä varten
+        setPhase('scoring');
+        apiFetch({
+          url    : `${apiBase}/analyze`,
+          method : 'POST',
+          headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+          data   : { post_id: postId, content: optimized, title },
+        }).then(r2 => {
+          setAnalysisAfter(r2);
+          setPhase('optimized');
+        }).catch(() => {
+          setPhase('optimized'); // Pisteiden haku epäonnistui — jatketaan silti
+        });
       }).catch(e => {
         setError(e.message || 'Optimointi epäonnistui.');
         setPhase('analyzed');
@@ -126,7 +141,7 @@
       });
     }
 
-    const isBusy = ['analyzing', 'optimizing', 'publishing'].includes(phase);
+    const isBusy = ['analyzing', 'optimizing', 'scoring', 'publishing'].includes(phase);
 
     return wp.element.createElement(
       PluginSidebar,
@@ -222,6 +237,19 @@
       // Diff-osio
       optimizedContent && wp.element.createElement(
         PanelBody, { title: 'Optimoitu sisältö', initialOpen: true },
+
+        // Pisteiden vertailu
+        phase === 'scoring' && wp.element.createElement( 'div', { className: 'geo-busy' },
+          wp.element.createElement( Spinner ),
+          ' Lasketaan pisteet...'
+        ),
+        analysis && analysisAfter && wp.element.createElement(
+          'div', { className: 'geo-score-comparison' },
+          scoreCompare('Ennen', analysis.geo_score),
+          wp.element.createElement( 'span', { className: 'geo-score-arrow' }, '→' ),
+          scoreCompare('Jälkeen', analysisAfter.geo_score),
+        ),
+
         wp.element.createElement( 'p', { className: 'geo-diff-hint' },
           'Tarkista optimoitu sisältö ennen julkaisua.'
         ),
@@ -238,7 +266,7 @@
             '✅ Hyväksy ja julkaise'
           ),
           wp.element.createElement(
-            Button, { variant: 'secondary', isDestructive: true, onClick: () => { setOptimized(''); setPhase('analyzed'); } },
+            Button, { variant: 'secondary', isDestructive: true, onClick: () => { setOptimized(''); setAnalysisAfter(null); setPhase('analyzed'); } },
             '✕ Hylkää'
           ),
         ),
@@ -259,6 +287,15 @@
           'Palauta varmuuskopiosta'
         ),
       ),
+    );
+  }
+
+  function scoreCompare(label, score) {
+    const mod = score >= 7 ? 'good' : score >= 4 ? 'medium' : 'bad';
+    return wp.element.createElement(
+      'div', { className: 'geo-score-compare-item' },
+      wp.element.createElement( 'span', { className: 'geo-score-compare-label' }, label ),
+      wp.element.createElement( 'span', { className: `geo-score__value geo-score__value--${mod}` }, `${score}/10` ),
     );
   }
 
