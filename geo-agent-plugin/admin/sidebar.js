@@ -37,7 +37,7 @@
     useEffect(() => {
       if (!postId) return;
       apiFetch({
-        path    : `${apiBase}/backup-status?post_id=${postId}`,
+        url     : `${apiBase}/backup-status?post_id=${postId}`,
         headers : { 'X-WP-Nonce': nonce },
       }).then(r => {
         setHasBackup(r.has_backup);
@@ -50,7 +50,7 @@
       setNotice(null);
       setPhase('analyzing');
       apiFetch({
-        path   : `${apiBase}/analyze`,
+        url    : `${apiBase}/analyze`,
         method : 'POST',
         headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
         data   : { post_id: postId, content, title },
@@ -68,7 +68,7 @@
       setError(null);
       setPhase('optimizing');
       apiFetch({
-        path   : `${apiBase}/optimize`,
+        url    : `${apiBase}/optimize`,
         method : 'POST',
         headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
         data   : {
@@ -90,7 +90,7 @@
     function handlePublish() {
       setPhase('publishing');
       apiFetch({
-        path   : `${apiBase}/publish`,
+        url    : `${apiBase}/publish`,
         method : 'POST',
         headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
         data   : { post_id: postId, optimized_content: optimizedContent },
@@ -110,7 +110,7 @@
     function handleRollback() {
       if (!confirm('Palautetaanko sivu varmuuskopiosta? Nykyiset muutokset katoavat.')) return;
       apiFetch({
-        path   : `${apiBase}/rollback`,
+        url    : `${apiBase}/rollback`,
         method : 'POST',
         headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
         data   : { post_id: postId },
