@@ -95,6 +95,8 @@
         headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
         data   : { post_id: postId, optimized_content: optimizedContent },
       }).then(() => {
+        // Päivitä editori optimoidulla sisällöllä jotta uudelleenanalyysi käyttää uutta tekstiä
+        editPost({ content: optimizedContent });
         setNotice('✅ Sivu julkaistu onnistuneesti.');
         setPhase('idle');
         setAnalysis(null);
