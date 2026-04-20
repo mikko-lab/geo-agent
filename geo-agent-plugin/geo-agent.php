@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GEO Agent
  * Description: GEO+SEO-hybridioptimointi WordPress-sisällölle. Analysoi sivun GEO-pisteet ja SEO-signaalit, ehdottaa parannettua sisältöä Claudella ja julkaisee hyväksynnän jälkeen.
- * Version: 1.0.0
+ * Version: 1.0.2
  * Author: Mikko Tarkiainen / WP Saavutettavuus
  * Requires at least: 6.0
  * Requires PHP: 8.0
@@ -11,9 +11,21 @@
 
 defined('ABSPATH') || exit;
 
-define('GEO_AGENT_VERSION', '1.0.0');
+define('GEO_AGENT_VERSION', '1.0.2');
 define('GEO_AGENT_DIR', plugin_dir_path(__FILE__));
 define('GEO_AGENT_URL', plugin_dir_url(__FILE__));
+
+// PHP-versiotarkistus — vaatii 8.0+ (union types, match, str_contains)
+if (version_compare(PHP_VERSION, '8.0.0', '<')) {
+    add_action('admin_notices', function () {
+        echo '<div class="notice notice-error"><p>'
+            . '<strong>GEO Agent</strong> vaatii PHP 8.0+. '
+            . 'Palvelimellasi on PHP <strong>' . PHP_VERSION . '</strong>. '
+            . 'Ota yhteyttä hosting-palveluntarjoajaasi PHP-version päivittämiseksi.'
+            . '</p></div>';
+    });
+    return;
+}
 
 require_once GEO_AGENT_DIR . 'includes/class-analyzer.php';
 require_once GEO_AGENT_DIR . 'includes/class-optimizer.php';
