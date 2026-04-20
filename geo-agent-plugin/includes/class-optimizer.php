@@ -19,7 +19,10 @@ class GEO_Agent_Optimizer {
         . "- Sanamäärä ≥ 600\n"
         . "- Ensimmäinen kappale toimii meta descriptionina (120–320 merkkiä)\n"
         . "- Sisäiset linkit muihin sivuston sivuihin\n\n"
-        . "Palauta VAIN optimoitu sisältö ilman selityksiä tai kommentteja.";
+        . "TÄRKEÄÄ — MUOTOILU:\n"
+        . "- Käytä HTML-tageja, EI markdownia. Otsikot: <h2>, <h3>. Kappaleet: <p>. Listat: <ul><li>.\n"
+        . "- Älä käytä #, ##, **, _ tai muita markdown-merkkejä.\n"
+        . "- Palauta VAIN HTML-sisältö ilman selityksiä, kommentteja tai ```-koodilohkoja.";
 
     public function __construct() {
         $this->analyzer = new GEO_Agent_Analyzer();
