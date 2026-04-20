@@ -122,7 +122,7 @@ class GEO_Agent_Optimizer {
     /**
      * Julkaise optimoitu sisältö ja tee turvallisuustarkistukset.
      */
-    public function publish(int $post_id, string $optimized_content): true|\WP_Error {
+    public function publish(int $post_id, string $optimized_content): bool|\WP_Error {
         // Varmuuskopio ennen kirjoitusta
         $this->backup($post_id);
 
