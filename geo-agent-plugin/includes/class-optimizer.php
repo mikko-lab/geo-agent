@@ -49,7 +49,7 @@ class GEO_Agent_Optimizer {
             . "OTSIKKO: {$title}\n\n"
             . "SISÄLTÖ:\n{$text}";
 
-        return $this->analyzer->call_claude($prompt, self::SYSTEM_PROMPT);
+        return $this->analyzer->call_claude($prompt, self::SYSTEM_PROMPT, (int) get_option('geo_agent_max_tokens', 8000));
     }
 
     /**

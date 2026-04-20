@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GEO Agent
  * Description: GEO+SEO-hybridioptimointi WordPress-sisällölle. Analysoi sivun GEO-pisteet ja SEO-signaalit, ehdottaa parannettua sisältöä Claudella ja julkaisee hyväksynnän jälkeen.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Mikko Tarkiainen / WP Saavutettavuus
  * Requires at least: 6.0
  * Requires PHP: 8.0
@@ -11,7 +11,7 @@
 
 defined('ABSPATH') || exit;
 
-define('GEO_AGENT_VERSION', '1.0.2');
+define('GEO_AGENT_VERSION', '1.0.3');
 define('GEO_AGENT_DIR', plugin_dir_path(__FILE__));
 define('GEO_AGENT_URL', plugin_dir_url(__FILE__));
 
@@ -145,7 +145,7 @@ function geo_agent_settings_page(): void {
                     <th>Max tokens</th>
                     <td>
                         <input type="number" name="geo_agent_max_tokens"
-                            value="<?php echo esc_attr(get_option('geo_agent_max_tokens', 4000)); ?>"
+                            value="<?php echo esc_attr(get_option('geo_agent_max_tokens', 8000)); ?>"
                             min="500" max="8000" class="small-text" />
                     </td>
                 </tr>
