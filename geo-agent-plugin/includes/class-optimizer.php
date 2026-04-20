@@ -35,7 +35,7 @@ class GEO_Agent_Optimizer {
         // Säilytetään media- ja HTML-lohkot (kuvat, tyylit, shortcodet jne.)
         $preserved = [];
         $text_only = preg_replace_callback(
-            '/<!-- wp:(image|html|gallery|video|audio|cover|media-text|file|shortcode|embed|buttons|button|separator|spacer)(\s[^>]*)? -->[\s\S]*?<!-- \/wp:\1 -->/U',
+            '/<!-- wp:(image|html|gallery|video|audio|cover|media-text|file|shortcode|embed|buttons|button|separator|spacer)(\s[^>]*)? -->[\s\S]*?<!-- \/wp:\1 -->/',
             function ($m) use (&$preserved) { $preserved[] = $m[0]; return ''; },
             $content_html
         );

@@ -69,11 +69,16 @@ class GEO_Agent_Analyzer {
         $internal_links = array_filter($internal_links, fn($l) => !str_contains($l, 'wp-content'));
         $internal_link_count = count($internal_links);
 
-        // Meta description -arvio: ensimmäinen kappale 120–320 merkkiä
-        preg_match('/<p[^>]*>(.*?)<\/p>/is', $content_html, $para_match);
-        $first_para    = wp_strip_all_tags($para_match[1] ?? '');
-        $para_length   = mb_strlen($first_para);
-        $has_meta_desc = $para_length >= 120 && $para_length <= 320;
+        // Meta description — Rank Math ensin, sen jälkeen ensimmäinen kappale
+        $rm_desc       = get_post_meta($post_id, 'rank_math_description', true);
+        if ($rm_desc) {
+            $has_meta_desc = true;
+        } else {
+            preg_match('/<p[^>]*>(.*?)<\/p>/is', $content_html, $para_match);
+            $first_para    = wp_strip_all_tags($para_match[1] ?? '');
+            $para_length   = mb_strlen($first_para);
+            $has_meta_desc = $para_length >= 120 && $para_length <= 320;
+        }
 
         // Puutteet
         $fixes = [];
@@ -121,8 +126,10 @@ class GEO_Agent_Analyzer {
             return ['geo_score' => 0, 'top_issues' => ['Claude-analyysi epäonnistui: ' . $result->get_error_message()]];
         }
 
-        preg_match('/\{.*\}/s', $result, $m);
-        $decoded = json_decode($m[0] ?? $result, true);
+        // Poistetaan mahdolliset markdown-koodilohkot (```json ... ```)
+        $clean = preg_replace('/```(?:json)?\s*([\s\S]*?)```/', '$1', $result);
+        preg_match('/\{[\s\S]*\}/', $clean ?? $result, $m);
+        $decoded = json_decode($m[0] ?? '', true);
         return is_array($decoded) ? $decoded : ['geo_score' => 0, 'top_issues' => ['JSON-parsinta epäonnistui']];
     }
 
