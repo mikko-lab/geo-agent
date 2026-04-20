@@ -32,7 +32,21 @@ class GEO_Agent_Optimizer {
      * Optimoi sisältö strategian mukaan.
      */
     public function optimize(string $content_html, string $title, string $strategy, array $seo_fixes): string|\WP_Error {
-        $text = wp_strip_all_tags($content_html);
+        // Säilytetään media- ja HTML-lohkot (kuvat, tyylit, shortcodet jne.)
+        $preserved = [];
+        $text_only = preg_replace_callback(
+            '/<!-- wp:(image|html|gallery|video|audio|cover|media-text|file|shortcode|embed|buttons|button|separator|spacer)(\s[^>]*)? -->[\s\S]*?<!-- \/wp:\1 -->/U',
+            function ($m) use (&$preserved) { $preserved[] = $m[0]; return ''; },
+            $content_html
+        );
+        // Self-closing lohkot: <!-- wp:image {...} /-->
+        $text_only = preg_replace_callback(
+            '/<!-- wp:(?:image|gallery|separator|spacer)(?:\s[^>]*)?\s*\/-->/',
+            function ($m) use (&$preserved) { $preserved[] = $m[0]; return ''; },
+            $text_only
+        );
+
+        $text = wp_strip_all_tags($text_only);
 
         $strategy_instruction = match ($strategy) {
             'geo'    => 'Optimoi GEO-periaatteiden mukaan. Paranna AI-siteerattavuutta kysymys-vastaus-rakenteella ja faktoilla.',
@@ -52,7 +66,12 @@ class GEO_Agent_Optimizer {
             . "OTSIKKO: {$title}\n\n"
             . "SISÄLTÖ:\n{$text}";
 
-        return $this->analyzer->call_claude($prompt, self::SYSTEM_PROMPT, (int) get_option('geo_agent_max_tokens', 8000));
+        $optimized = $this->analyzer->call_claude($prompt, self::SYSTEM_PROMPT, (int) get_option('geo_agent_max_tokens', 8000));
+        if (is_wp_error($optimized)) return $optimized;
+
+        // Palautetaan säilytetyt lohkot (kuvat, tyylit) ensin, sitten optimoitu teksti
+        $prefix = empty($preserved) ? '' : implode("\n\n", $preserved) . "\n\n";
+        return $prefix . $optimized;
     }
 
     /**
