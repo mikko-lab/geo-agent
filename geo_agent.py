@@ -224,11 +224,11 @@ def check_seo_signals(post: WPPost) -> SEOSignals:
     wp_domain = urlparse(post.link).netloc
     all_links = re.findall(r'href=["\']([^"\']+)["\']', html)
     internal_links = [
-        l for l in all_links
-        if l.startswith("/") or wp_domain in l
+        link for link in all_links
+        if link.startswith("/") or wp_domain in link
     ]
     # Poistetaan ankkurilinkit ja tiedostolinkit
-    internal_links = [l for l in internal_links if not l.startswith("/#") and "wp-content" not in l]
+    internal_links = [link for link in internal_links if not link.startswith("/#") and "wp-content" not in link]
     internal_link_count = len(internal_links)
 
     # Meta description -arvio: onko ensimmäinen kappale 120–160 merkkiä
@@ -393,13 +393,13 @@ def show_strategy(strategy: OptimizationStrategy, seo: SEOSignals):
     icon = icons.get(strategy.strategy, "?")
     print(f"\n  {icon} Strategia: {strategy.strategy.upper()}")
     print(f"     {strategy.reasoning}")
-    print(f"\n  📊 SEO-signaalit:")
+    print("\n  📊 SEO-signaalit:")
     print(f"     Sanamäärä: {seo.word_count} {'✅' if seo.word_count >= 600 else '❌'}")
     print(f"     H2-otsikot: {seo.h2_count} kpl, focus keyword H2:ssa: {'✅' if seo.focus_keyword_in_h2 else '❌'}")
     print(f"     Sisäiset linkit: {seo.internal_link_count} {'✅' if seo.internal_link_count >= 2 else '❌'}")
     print(f"     Meta description -arvio: {'✅' if seo.has_meta_description else '❌'}")
     if strategy.seo_fixes:
-        print(f"\n  🔧 SEO-korjaukset:")
+        print("\n  🔧 SEO-korjaukset:")
         for fix in strategy.seo_fixes:
             print(f"     • {fix}")
 
@@ -451,15 +451,15 @@ def run_agent():
     results = []
 
     for i, post in enumerate(posts, 1):
-        print(f"══════════════════════════════════════════════════════")
+        print("══════════════════════════════════════════════════════")
         print(f"  Postaus {i}/{len(posts)}: {post.title}")
         print(f"  URL: {post.link}")
-        print(f"══════════════════════════════════════════════════════")
+        print("══════════════════════════════════════════════════════")
 
         # 0. Suojattu slug
         slug = extract_slug(post.link) or post.slug
         if slug in PROTECTED_SLUGS:
-            print(f"  🔒 Suojattu sivu — ohitetaan.\n")
+            print("  🔒 Suojattu sivu — ohitetaan.\n")
             results.append({"post": post.title, "strategy": "–", "action": "suojattu"})
             continue
 
